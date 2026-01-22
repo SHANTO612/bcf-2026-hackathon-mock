@@ -50,6 +50,19 @@ Your API must support these LLM options (passed in the `llm` field):
 - `gemini-2.5-flash-preview`
 - `gpt-4o-mini`
 
+**Recommendation:** Use a Gemini model (preferably `gemini-2.5-flash`) unless you have a specific reason to use GPT.
+
+### LLM API keys (required)
+
+You will need an API key for the provider backing the model you use:
+
+- **Gemini**: Create/manage keys in [Google AI Studio](https://aistudio.google.com/app/apikey)  
+  Documentation: [Using Gemini API keys](https://ai.google.dev/gemini-api/docs/api-key)
+- **OpenAI (GPT)**: Create/manage keys in the [OpenAI API dashboard](https://platform.openai.com/api-keys)  
+  Documentation: [Developer quickstart](https://platform.openai.com/docs/quickstart)
+
+Store keys in environment variables and do not commit them to git.
+
 ---
 
 ## Checkpoints
@@ -57,6 +70,10 @@ Your API must support these LLM options (passed in the `llm` field):
 Work through these checkpoints to build your solution step by step.
 
 ### Checkpoint 1: Environment Setup
+
+You can run the database using **Docker** (recommended) or **locally**.
+
+#### Option A: Docker (recommended)
 
 1. Make sure you have Docker installed
 2. Start the provided services:
@@ -69,14 +86,36 @@ Work through these checkpoints to build your solution step by step.
    ```
 4. Open pgweb to explore the database: http://localhost:8082
 
-**Why a database?** While this practice problem doesn't require database queries, the main hackathon will. This checkpoint ensures your Docker setup works correctly.
+#### Option B: Run PostgreSQL locally
+
+1. Install PostgreSQL and make sure the `psql` CLI is available
+2. Create the database (example):
+   ```bash
+   createdb -U postgres practice_db
+   ```
+3. Load the schema + seed data from `data/init.sql`:
+   ```bash
+   psql -U postgres -d practice_db -f data/init.sql
+   ```
+4. Verify it worked:
+   ```bash
+   psql -U postgres -d practice_db -c "SELECT 'Hello, Database!';"
+   ```
+
+You can use any PostgreSQL client (pgAdmin, DBeaver, etc.) to inspect the data.
+
+**Why a database?** While this practice problem doesn't require database queries, the main hackathon will. This checkpoint ensures your database setup works correctly.
 
 ### Checkpoint 2: Explore the Sample Database
 
 Connect to the database and explore the schema:
 
 ```bash
+# Docker:
 docker exec -it practice_db psql -U postgres -d practice_db
+
+# Local:
+psql -U postgres -d practice_db
 ```
 
 Run these commands:
@@ -180,6 +219,10 @@ Parses contact information from natural language text and validates against data
 |-------|--------|----------|-------------|
 | text  | string | Yes      | Natural language text containing contact info |
 | llm   | string | Yes      | LLM to use: `gemini-2.5-flash`, `gemini-2.5-flash-preview`, or `gpt-4o-mini` |
+
+**API keys:** If you select a Gemini model, you’ll need a Gemini API key. If you select a GPT model, you’ll need an OpenAI API key.
+- Gemini key docs: [Using Gemini API keys](https://ai.google.dev/gemini-api/docs/api-key)
+- OpenAI key dashboard: [OpenAI API keys](https://platform.openai.com/api-keys)
 
 **Response:**
 | Field             | Type          | Description |
