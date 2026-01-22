@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Parser API</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-top: 2rem; background-color: #f8f9fa; }
+        .container { max-width: 800px; }
+        .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        pre { background-color: #f1f3f5; padding: 1rem; border-radius: 5px; }
+        .status-badge { font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col">
+                <h1 class="display-5">Contact Parser API</h1>
+                <p class="lead">Extract contact information using LLMs and validate against the database.</p>
+                <div id="health-status" class="alert alert-secondary">
+                    Checking API health...
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Test Parser</h5>
+            </div>
+            <div class="card-body">
+                <form id="parseForm">
+                    <div class="mb-3">
+                        <label for="textInput" class="form-label">Text to Parse</label>
+                        <textarea class="form-control" id="textInput" rows="3" placeholder="e.g. You can reach John Smith at john.smith@acme.com..." required>Contact Jane Doe at jane.doe@global.com, phone: 555-234-5678</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="llmSelect" class="form-label">LLM Model</label>
+                        <select class="form-select" id="llmSelect">
+                            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash</option>
+                            <option value="gpt-4o-mini">GPT-4o Mini</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Parse Contact</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card" id="resultCard" style="display: none;">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">Result</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Structured Data</h6>
+                        <ul class="list-group list-group-flush mb-3">
+                            <li class="list-group-item"><strong>Name:</strong> <span id="resName">-</span></li>
+                            <li class="list-group-item"><strong>Email:</strong> <span id="resEmail">-</span></li>
+                            <li class="list-group-item"><strong>Phone:</strong> <span id="resPhone">-</span></li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Database Validation</h6>
+                        <ul class="list-group list-group-flush mb-3">
+                            <li class="list-group-item"><strong>Found:</strong> <span id="resFound">-</span></li>
+                            <li class="list-group-item"><strong>Company:</strong> <span id="resCompany">-</span></li>
+                        </ul>
+                    </div>
+                </div>
+                <h6>Raw JSON</h6>
+                <pre id="rawJson"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check Health
+        fetch('/health')
+            .then(res => res.json())
+            .then(data => {
+                const el = document.getElementById('health-status');
+                if (data.status === 'ok') {
+                    el.className = 'alert alert-success';
+                    el.innerHTML = `✅ <strong>System Operational</strong> | Database: ${data.database}`;
+                } else {
+                    el.className = 'alert alert-danger';
+                    el.innerHTML = `❌ <strong>System Issue</strong> | Status: ${data.status}`;
+                }
+            })
+            .catch(err => {
+                const el = document.getElementById('health-status');
+                el.className = 'alert alert-danger';
+                el.innerHTML = `❌ <strong>Connection Failed</strong>: Is the server running?`;
+            });
+
+        // Handle Form Submit
+        document.getElementById('parseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const resultCard = document.getElementById('resultCard');
+            
+            btn.disabled = true;
+            btn.textContent = 'Parsing...';
+            resultCard.style.display = 'none';
+
+            const text = document.getElementById('textInput').value;
+            const llm = document.getElementById('llmSelect').value;
+
+            try {
+                const res = await fetch('/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, llm })
+                });
+                
+                const data = await res.json();
+                
+                // Update UI
+                document.getElementById('resName').textContent = data.name || 'null';
+                document.getElementById('resEmail').textContent = data.email || 'null';
+                document.getElementById('resPhone').textContent = data.phone || 'null';
+                
+                const foundEl = document.getElementById('resFound');
+                foundEl.textContent = data.found_in_database ? 'Yes' : 'No';
+                foundEl.className = data.found_in_database ? 'text-success fw-bold' : 'text-danger fw-bold';
+                
+                document.getElementById('resCompany').textContent = data.company || '-';
+                document.getElementById('rawJson').textContent = JSON.stringify(data, null, 2);
+                
+                resultCard.style.display = 'block';
+            } catch (err) {
+                alert('Error parsing contact: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Parse Contact';
+            }
+        });
+    </script>
+</body>
+</html>
