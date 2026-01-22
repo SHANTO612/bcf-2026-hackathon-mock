@@ -45,7 +45,7 @@ If the contact is NOT found in the database:
 
 ### Supported LLMs
 
-Your API must support these LLM options (passed in the `llm` field):
+Your API may support one or more of these LLM options (passed in the `llm` field):
 - `gemini-2.5-flash`
 - `gemini-2.5-flash-preview`
 - `gpt-4o-mini`
