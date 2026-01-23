@@ -10,9 +10,11 @@ import google.generativeai as genai
 from openai import OpenAI
 import re
 from dotenv import load_dotenv
+from pathlib import Path
 
 # Load environment variables
-load_dotenv()
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 app = FastAPI()
 
@@ -28,7 +30,7 @@ DB_PASS = os.getenv("DB_PASS", "postgres")
 
 # API Keys
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
 
 class ParseRequest(BaseModel):
     text: str
