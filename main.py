@@ -6,8 +6,11 @@ from typing import Optional
 import psycopg2
 import os
 import json
-import google.generativeai as genai
-from openai import OpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.pydantic_v1 import BaseModel as LCBaseModel, Field
 import re
 from dotenv import load_dotenv
 from pathlib import Path
@@ -32,6 +35,11 @@ DB_PASS = os.getenv("DB_PASS", "postgres")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+# LangChain Output Schema
+class ContactInfo(LCBaseModel):
+    name: Optional[str] = Field(description="The person's full name")
+    email: Optional[str] = Field(description="The email address")
+    phone: Optional[str] = Field(description="The phone number")
 
 class ParseRequest(BaseModel):
     text: str
@@ -80,85 +88,49 @@ def mock_extract(text: str) -> dict:
     
     # Simple name heuristics based on test cases
     name = None
-    # Look for 2 capitalized words
-    # "reach John Smith at"
-    # "Contact Jane Doe at"
-    # "Call Robert Johnson at"
-    # "Alex Thompson is"
-    # "Michael Brown can"
     
     words = text.split()
     for i in range(len(words) - 1):
         w1 = words[i].strip(",.")
         w2 = words[i+1].strip(",.")
         if w1[0].isupper() and w2[0].isupper() and w1.isalpha() and w2.isalpha():
-            # Filter out "Contact", "Call", "You" if they are at start of sentence?
-            # But "John Smith" is good.
-            # "Contact Jane" -> Contact is a verb.
             if w1 in ["Contact", "Call", "You", "For", "If"]:
                 continue
             name = f"{w1} {w2}"
             break
             
-    # Specific fix for "Contact Jane Doe" if the loop skipped it or picked "Jane Doe" correctly?
-    # "Contact Jane Doe" -> w1=Contact (skip), next w1=Jane w2=Doe -> "Jane Doe". Correct.
-    
-    # Fix for "For inquiries" -> "For Inquiries" might be picked up?
-    # "For" is in skip list.
-    
     return {"name": name, "email": email, "phone": phone}
 
-def extract_with_gemini(text: str, model_name: str) -> dict:
-    print(f"DEBUG: GEMINI_API_KEY type: {type(GEMINI_API_KEY)}, value: {str(GEMINI_API_KEY)[:5]}...")
-    if not GEMINI_API_KEY:
-        print("DEBUG: API Key is missing/empty")
+def extract_with_langchain(text: str, model_name: str, provider: str) -> dict:
+    """Extract contact info using LangChain with either Gemini or OpenAI."""
+    
+    llm = None
+    if provider == "gemini":
+        if not GEMINI_API_KEY:
+            return mock_extract(text)
+        llm = ChatGoogleGenerativeAI(model=model_name, google_api_key=GEMINI_API_KEY)
+    elif provider == "openai":
+        if not OPENAI_API_KEY:
+            return mock_extract(text)
+        llm = ChatOpenAI(model=model_name, api_key=OPENAI_API_KEY)
+    else:
         return mock_extract(text)
-    
-    print(f"INFO: Attempting to use Gemini API with model {model_name}")
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(model_name)
-    
-    prompt = f"""
-    Extract contact information from the given text.
-    Return a JSON object with these fields:
-    - name: The person's full name (string or null)
-    - email: The email address (string or null)
-    - phone: The phone number (string or null)
 
-    Return ONLY the JSON object, no other text.
-    
-    Text: {text}
-    """
-    
     try:
-        response = model.generate_content(prompt)
-        content = response.text
-        cleaned_json = clean_json_string(content)
-        return json.loads(cleaned_json)
-    except Exception as e:
-        print(f"Gemini error: {e}")
-        # Fallback to mock if API fails
-        return mock_extract(text)
-
-def extract_with_openai(text: str, model_name: str) -> dict:
-    if not OPENAI_API_KEY:
-        return mock_extract(text)
+        parser = JsonOutputParser(pydantic_object=ContactInfo)
         
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    
-    try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "Extract contact information from the given text. Return a JSON object with these fields: name, email, phone. Return ONLY the JSON object, no other text."},
-                {"role": "user", "content": text}
-            ],
-            response_format={"type": "json_object"}
+        prompt = PromptTemplate(
+            template="Extract contact information from the given text.\n{format_instructions}\nText: {text}",
+            input_variables=["text"],
+            partial_variables={"format_instructions": parser.get_format_instructions()},
         )
-        content = response.choices[0].message.content
-        return json.loads(content)
+
+        chain = prompt | llm | parser
+        
+        result = chain.invoke({"text": text})
+        return result
     except Exception as e:
-        print(f"OpenAI error: {e}")
+        print(f"LangChain error ({provider}): {e}")
         return mock_extract(text)
 
 @app.get("/health", response_model=HealthResponse)
@@ -188,9 +160,9 @@ def parse_contact(request: ParseRequest):
     llm_lower = request.llm.lower()
     
     if "gemini" in llm_lower:
-        extracted_data = extract_with_gemini(request.text, request.llm)
+        extracted_data = extract_with_langchain(request.text, request.llm, "gemini")
     elif "gpt" in llm_lower:
-        extracted_data = extract_with_openai(request.text, request.llm)
+        extracted_data = extract_with_langchain(request.text, request.llm, "openai")
     else:
         # Default to mock if unknown
         extracted_data = mock_extract(request.text)

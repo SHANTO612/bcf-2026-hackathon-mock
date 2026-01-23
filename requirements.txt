@@ -6,3 +6,6 @@ google-generativeai
 openai
 pydantic
 requests
+langchain
+langchain-google-genai
+langchain-openai
